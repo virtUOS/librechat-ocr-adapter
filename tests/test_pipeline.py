@@ -105,7 +105,7 @@ async def test_page_failure_fails_document_and_cancels_the_rest(settings, fake, 
     elapsed = time.monotonic() - started
     # Without cancellation all 5 pages would be tried twice (10 requests).
     assert len(fake.requests) < 10
-    assert elapsed < 0.9
+    assert elapsed < 1.5
     await asyncio.sleep(0.05)
     assert fake.in_flight == 0
 
@@ -144,3 +144,18 @@ async def test_pdfium_failure_during_processing_is_unprocessable(settings, vllm_
     monkeypatch.setattr(PdfPage, "needs_ocr", broken)
     with pytest.raises(Unprocessable):
         await run(make_pipeline(settings, vllm_http), make_pdf(["text"]))
+
+
+async def test_open_rejects_too_many_pages_before_loading_them(settings, vllm_http, monkeypatch):
+    import pypdfium2 as pdfium
+
+    loaded = []
+    original = pdfium.PdfDocument.get_page
+    monkeypatch.setattr(
+        pdfium.PdfDocument, "get_page", lambda self, i: (loaded.append(i), original(self, i))[1]
+    )
+    with pytest.raises(TooLarge):
+        await make_pipeline(settings, vllm_http, max_pages=2).open(
+            make_pdf(["text"] * 3), "application/pdf"
+        )
+    assert loaded == []

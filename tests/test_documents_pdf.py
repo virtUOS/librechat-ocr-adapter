@@ -1,7 +1,7 @@
 import pytest
 
 from ocr_adapter.documents import Dimensions, PdfDocument, normalize_text, open_document
-from ocr_adapter.errors import Unprocessable
+from ocr_adapter.errors import TooLarge, Unprocessable
 
 from fixtures import HEADER, INVISIBLE_HEADER, make_pdf
 
@@ -137,3 +137,19 @@ trailer << /Root 1 0 R >>
 def test_broken_page_tree_is_unprocessable():
     with pytest.raises(Unprocessable):
         PdfDocument(BROKEN_PAGE_TREE)
+
+
+def test_page_count_is_checked_before_pages_are_loaded(monkeypatch):
+    import pypdfium2 as pdfium
+
+    loaded = []
+    original = pdfium.PdfDocument.get_page
+
+    def counting_get_page(self, index):
+        loaded.append(index)
+        return original(self, index)
+
+    monkeypatch.setattr(pdfium.PdfDocument, "get_page", counting_get_page)
+    with pytest.raises(TooLarge):
+        PdfDocument(make_pdf(["text"] * 3), max_pages=2)
+    assert loaded == []

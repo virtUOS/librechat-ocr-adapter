@@ -58,7 +58,17 @@ def test_palette_png_with_transparency_is_flattened():
 
 def test_cmyk_jpeg_renders_rgb():
     p = ImageDocument(make_image("JPEG", size=(20, 20), mode="CMYK")).pages[0]
-    assert p.render(2048).mode == "RGB"
+    img = p.render(2048)
+    assert img.mode == "RGB"
+    assert img.getpixel((5, 5)) == (255, 255, 255)  # CMYK 0,0,0,0 is white
+
+
+def test_colour_key_transparency_is_flattened_on_white():
+    img = Image.new("RGB", (10, 10), (0, 0, 0))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", transparency=(0, 0, 0))  # black is the transparent key
+    p = ImageDocument(buf.getvalue()).pages[0]
+    assert p.render(2048).getpixel((0, 0)) == (255, 255, 255)
 
 
 def test_multi_frame_tiff_is_one_page_per_frame():

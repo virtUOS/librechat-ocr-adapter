@@ -38,7 +38,9 @@ def fetch():
     def _fetch(name: str) -> bytes:
         path = CACHE / f"{name}.pdf"
         if not path.exists():
-            path.write_bytes(httpx.get(DOCUMENTS[name], follow_redirects=True, timeout=120).content)
+            response = httpx.get(DOCUMENTS[name], follow_redirects=True, timeout=120)
+            response.raise_for_status()
+            path.write_bytes(response.content)
         return path.read_bytes()
 
     return _fetch

@@ -1,6 +1,8 @@
+import errno
+
 import pytest
 
-from ocr_adapter.errors import NotFound
+from ocr_adapter.errors import NotFound, StorageFull
 from ocr_adapter.store import FileStore
 
 
@@ -50,10 +52,11 @@ def test_sweep_removes_expired_only(tmp_path):
     assert store.sweep() == 0
 
 
-def test_clear_on_startup_removes_stray_files(tmp_path):
-    (tmp_path / "leftover").write_bytes(b"old")
+def test_clear_on_startup_removes_stray_uploads(tmp_path):
+    leftover = tmp_path / ("c" * 32)
+    leftover.write_bytes(b"old")
     store = FileStore(tmp_path, ttl_s=60, clock=Clock())
-    assert not (tmp_path / "leftover").exists()
+    assert not leftover.exists()
     assert len(store) == 0
 
 
@@ -61,3 +64,27 @@ def test_directory_is_created(tmp_path):
     store = FileStore(tmp_path / "nested" / "uploads", ttl_s=60, clock=Clock())
     f = store.save(b"x", "x", "image/png")
     assert f.path.parent == tmp_path / "nested" / "uploads"
+
+
+def test_clear_only_removes_upload_files(tmp_path):
+    (tmp_path / "unrelated.txt").write_bytes(b"keep me")
+    (tmp_path / ("a" * 32)).write_bytes(b"stale upload")
+    (tmp_path / ("b" * 32 + ".part")).write_bytes(b"stale partial")
+    FileStore(tmp_path, ttl_s=60, clock=Clock())
+    assert (tmp_path / "unrelated.txt").exists()
+    assert not (tmp_path / ("a" * 32)).exists()
+    assert not (tmp_path / ("b" * 32 + ".part")).exists()
+
+
+def test_full_disk_is_storage_full_and_leaves_no_partial(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    def no_space(self, data):
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(Path, "write_bytes", no_space)
+    store = FileStore(tmp_path, ttl_s=60, clock=Clock())
+    with pytest.raises(StorageFull):
+        store.save(b"x", "x", "image/png")
+    assert list(tmp_path.iterdir()) == []
+    assert len(store) == 0

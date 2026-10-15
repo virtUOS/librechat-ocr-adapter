@@ -22,7 +22,7 @@ from PIL import Image
 
 from ocr_adapter.config import Settings
 from ocr_adapter.documents import Dimensions, Document, Page, open_document
-from ocr_adapter.errors import AdapterError, DocumentTimeout, TooLarge, Unprocessable
+from ocr_adapter.errors import AdapterError, DocumentTimeout, Unprocessable
 from ocr_adapter.metrics import Metrics
 from ocr_adapter.ocr_client import OcrClient
 
@@ -72,13 +72,9 @@ class Pipeline:
             raise Unprocessable(f"cannot read document: {exc}") from exc
 
     async def open(self, data: bytes, content_type: str) -> Document:
-        document = await self._in_pdfium(
-            open_document, data, content_type, self._s.max_image_pixels
+        return await self._in_pdfium(
+            open_document, data, content_type, self._s.max_image_pixels, self._s.max_pages
         )
-        if len(document.pages) > self._s.max_pages:
-            await self.close(document)
-            raise TooLarge(f"{len(document.pages)} pages exceed the limit of {self._s.max_pages}")
-        return document
 
     async def close(self, document: Document) -> None:
         """Queued behind any pdfium work still running for this document."""

@@ -126,12 +126,14 @@ class PdfPage:
 class PdfDocument:
     kind = "pdf"
 
-    def __init__(self, data: bytes):
+    def __init__(self, data: bytes, max_pages: int | None = None):
         try:
             self._pdf = pdfium.PdfDocument(data)
             count = len(self._pdf)
             if count == 0:
                 raise Unprocessable("PDF has no pages")
+            if max_pages is not None and count > max_pages:
+                raise TooLarge(f"{count} pages exceed the limit of {max_pages}")
             self._pdf.init_forms()  # must precede page loading for form fields to render
             self.pages = [PdfPage(self._pdf[i], i) for i in range(count)]
         except pdfium.PdfiumError as exc:
@@ -144,7 +146,7 @@ class PdfDocument:
 def _flatten(img: Image.Image) -> Image.Image:
     """Apply EXIF orientation, put transparency on white, return RGB."""
     img = ImageOps.exif_transpose(img)
-    has_alpha = img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info)
+    has_alpha = img.mode in ("RGBA", "LA", "PA") or "transparency" in img.info
     if has_alpha:
         rgba = img.convert("RGBA")
         background = Image.new("RGB", rgba.size, (255, 255, 255))
@@ -216,11 +218,13 @@ class ImagePage:
 class ImageDocument:
     kind = "image"
 
-    def __init__(self, data: bytes, max_pixels: int | None = None):
+    def __init__(self, data: bytes, max_pixels: int | None = None, max_pages: int | None = None):
         try:
             img = Image.open(io.BytesIO(data))  # header only, no pixel data yet
             # Only TIFF frames are pages; an animated GIF is one picture.
             frame_count = getattr(img, "n_frames", 1) if img.format == "TIFF" else 1
+            if max_pages is not None and frame_count > max_pages:
+                raise TooLarge(f"{frame_count} pages exceed the limit of {max_pages}")
             dpi = img.info.get("dpi", (72, 72))[0]
             sizes = []
             for i in range(frame_count):
@@ -243,7 +247,12 @@ Page = PdfPage | ImagePage
 Document = PdfDocument | ImageDocument
 
 
-def open_document(data: bytes, content_type: str, max_pixels: int | None = None) -> Document:
+def open_document(
+    data: bytes,
+    content_type: str,
+    max_pixels: int | None = None,
+    max_pages: int | None = None,
+) -> Document:
     if content_type == "application/pdf":
-        return PdfDocument(data)
-    return ImageDocument(data, max_pixels=max_pixels)
+        return PdfDocument(data, max_pages=max_pages)
+    return ImageDocument(data, max_pixels=max_pixels, max_pages=max_pages)

@@ -46,6 +46,11 @@ class UpstreamUnavailable(AdapterError):
     type = "upstream_unavailable"
 
 
+class StorageFull(AdapterError):
+    status = 503
+    type = "storage_full"
+
+
 class DocumentTimeout(AdapterError):
     status = 504
     type = "timeout"

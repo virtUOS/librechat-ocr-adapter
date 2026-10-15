@@ -1,16 +1,21 @@
 """Uploads on disk (a tmpfs in production) with metadata in memory.
 Nothing survives a restart, and nothing outlives the TTL."""
 
+import errno
 import logging
+import re
 import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from ocr_adapter.errors import NotFound
+from ocr_adapter.errors import NotFound, StorageFull
 
 logger = logging.getLogger(__name__)
+
+# Only files this store wrote are ever removed: a finished upload or a partial one.
+UPLOAD_NAME = re.compile(r"^[0-9a-f]{32}(\.part)?$")
 
 
 @dataclass(frozen=True)
@@ -34,7 +39,7 @@ class FileStore:
 
     def clear(self) -> None:
         for path in self._dir.iterdir():
-            if path.is_file():
+            if path.is_file() and UPLOAD_NAME.match(path.name):
                 path.unlink()
         self._files.clear()
 
@@ -42,8 +47,14 @@ class FileStore:
         file_id = uuid.uuid4().hex
         path = self._dir / file_id
         partial = path.with_name(file_id + ".part")
-        partial.write_bytes(data)
-        partial.replace(path)
+        try:
+            partial.write_bytes(data)
+            partial.replace(path)
+        except OSError as exc:
+            partial.unlink(missing_ok=True)
+            if exc.errno == errno.ENOSPC:
+                raise StorageFull("upload storage is full") from exc
+            raise
         stored = StoredFile(file_id, filename, content_type, len(data), self._clock(), path)
         self._files[file_id] = stored
         logger.info("stored file id=%s bytes=%d type=%s", file_id, len(data), content_type)
