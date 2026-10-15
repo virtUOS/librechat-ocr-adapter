@@ -116,3 +116,24 @@ def test_garbage_is_unprocessable():
 def test_open_document_dispatches_pdf():
     doc = open_document(make_pdf(["text"]), "application/pdf")
     assert isinstance(doc, PdfDocument)
+
+
+def test_rotated_scan_coverage_uses_the_unrotated_page_box():
+    # Object bounds are in unrotated user space; clipping them against the
+    # displayed (rotated) size under-counts the image.
+    assert 0.75 < page("scan", rotate=90).image_coverage() < 0.85
+    assert page("offpage", rotate=90).image_coverage() == 1.0
+
+
+BROKEN_PAGE_TREE = b"""%PDF-1.4
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R 9 0 R] /Count 2 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] >> endobj
+trailer << /Root 1 0 R >>
+%%EOF
+"""
+
+
+def test_broken_page_tree_is_unprocessable():
+    with pytest.raises(Unprocessable):
+        PdfDocument(BROKEN_PAGE_TREE)

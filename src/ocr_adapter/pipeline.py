@@ -17,11 +17,12 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
 
+import pypdfium2 as pdfium
 from PIL import Image
 
 from ocr_adapter.config import Settings
 from ocr_adapter.documents import Dimensions, Document, Page, open_document
-from ocr_adapter.errors import AdapterError, DocumentTimeout, TooLarge
+from ocr_adapter.errors import AdapterError, DocumentTimeout, TooLarge, Unprocessable
 from ocr_adapter.metrics import Metrics
 from ocr_adapter.ocr_client import OcrClient
 
@@ -65,10 +66,15 @@ class Pipeline:
 
     async def _in_pdfium(self, fn: Callable[..., Any], *args: Any) -> Any:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(self._pdfium, fn, *args)
+        try:
+            return await loop.run_in_executor(self._pdfium, fn, *args)
+        except pdfium.PdfiumError as exc:
+            raise Unprocessable(f"cannot read document: {exc}") from exc
 
     async def open(self, data: bytes, content_type: str) -> Document:
-        document = await self._in_pdfium(open_document, data, content_type)
+        document = await self._in_pdfium(
+            open_document, data, content_type, self._s.max_image_pixels
+        )
         if len(document.pages) > self._s.max_pages:
             await self.close(document)
             raise TooLarge(f"{len(document.pages)} pages exceed the limit of {self._s.max_pages}")

@@ -11,7 +11,7 @@ import pypdfium2 as pdfium
 import pypdfium2.raw as raw
 from PIL import Image, ImageOps, UnidentifiedImageError
 
-from ocr_adapter.errors import Unprocessable, UnsupportedMediaType
+from ocr_adapter.errors import TooLarge, Unprocessable, UnsupportedMediaType
 
 PDF_MAGIC = b"%PDF"
 IMAGE_FORMATS = {
@@ -36,6 +36,8 @@ def sniff_content_type(data: bytes) -> str:
     try:
         with Image.open(io.BytesIO(data)) as img:
             fmt = img.format
+    except Image.DecompressionBombError as exc:
+        raise TooLarge("image exceeds the pixel limit") from exc
     except (UnidentifiedImageError, OSError, ValueError) as exc:
         raise UnsupportedMediaType("not a PDF or a supported image") from exc
     if fmt not in IMAGE_FORMATS:
@@ -89,8 +91,10 @@ class PdfPage:
         return total
 
     def image_coverage(self) -> float:
-        width, height = self._page.get_size()
-        area = width * height
+        # Object bounds are in unrotated user space with the page box's own
+        # origin, so clip against the box itself, not the displayed size.
+        box_left, box_bottom, box_right, box_top = self._page.get_bbox()
+        area = (box_right - box_left) * (box_top - box_bottom)
         if area <= 0:
             return 0.0
         covered = 0.0
@@ -98,8 +102,8 @@ class PdfPage:
             if obj.type != raw.FPDF_PAGEOBJ_IMAGE:
                 continue
             left, bottom, right, top = obj.get_bounds()
-            w = max(0.0, min(right, width) - max(left, 0.0))
-            h = max(0.0, min(top, height) - max(bottom, 0.0))
+            w = max(0.0, min(right, box_right) - max(left, box_left))
+            h = max(0.0, min(top, box_top) - max(bottom, box_bottom))
             covered += w * h
         return min(covered / area, 1.0)
 
@@ -126,12 +130,12 @@ class PdfDocument:
         try:
             self._pdf = pdfium.PdfDocument(data)
             count = len(self._pdf)
+            if count == 0:
+                raise Unprocessable("PDF has no pages")
+            self._pdf.init_forms()  # must precede page loading for form fields to render
+            self.pages = [PdfPage(self._pdf[i], i) for i in range(count)]
         except pdfium.PdfiumError as exc:
             raise Unprocessable(f"cannot open PDF: {exc}") from exc
-        if count == 0:
-            raise Unprocessable("PDF has no pages")
-        self._pdf.init_forms()  # must precede page loading for form fields to render
-        self.pages = [PdfPage(self._pdf[i], i) for i in range(count)]
 
     def close(self) -> None:
         self._pdf.close()
@@ -149,10 +153,34 @@ def _flatten(img: Image.Image) -> Image.Image:
     return img.convert("RGB")
 
 
+def _fit(width: int, height: int, longest_edge: int) -> tuple[int, int]:
+    """Size after shrinking so the longest edge is at most longest_edge; never upscales."""
+    longest = max(width, height)
+    if longest <= longest_edge:
+        return width, height
+    scale = longest_edge / longest
+    return max(1, round(width * scale)), max(1, round(height * scale))
+
+
+def _oriented_size(img: Image.Image) -> tuple[int, int]:
+    """The size after EXIF orientation, read from the header without decoding."""
+    width, height = img.size
+    try:
+        orientation = img.getexif().get(0x0112, 1)
+    except Exception:  # noqa: BLE001 - a broken EXIF block must not fail the upload
+        orientation = 1
+    return (height, width) if orientation in (5, 6, 7, 8) else (width, height)
+
+
 class ImagePage:
-    def __init__(self, image: Image.Image, index: int):
-        self._image = image  # already RGB, oriented, flattened
-        self._rendered: dict[int, Image.Image] = {}
+    """One image or TIFF frame. Pixels are decoded only in render(), one page at
+    a time, so a document never holds more than one full-resolution frame."""
+
+    def __init__(self, data: bytes, frame: int, size: tuple[int, int], dpi: float, index: int):
+        self._data = data
+        self._frame = frame
+        self._size = size  # oriented, full resolution
+        self._dpi = dpi
         self.index = index
 
     def visible_chars(self) -> int:
@@ -168,37 +196,44 @@ class ImagePage:
         return ""
 
     def render(self, longest_edge: int) -> Image.Image:
-        if longest_edge not in self._rendered:
-            img = self._image.copy()
-            # thumbnail() keeps the aspect ratio and only ever shrinks.
-            img.thumbnail((longest_edge, longest_edge), Image.Resampling.LANCZOS)
-            self._rendered[longest_edge] = img
-        return self._rendered[longest_edge]
+        try:
+            with Image.open(io.BytesIO(self._data)) as img:
+                img.seek(self._frame)
+                img.load()
+                flat = _flatten(img)
+        except (UnidentifiedImageError, OSError, ValueError) as exc:
+            raise Unprocessable(f"cannot decode image: {exc}") from exc
+        target = _fit(*flat.size, longest_edge)
+        if target != flat.size:
+            flat = flat.resize(target, Image.Resampling.LANCZOS)
+        return flat
 
     def dimensions(self, longest_edge: int) -> Dimensions:
-        width, height = self.render(longest_edge).size
-        dpi = self._image.info.get("dpi", (72, 72))[0]
-        return Dimensions(dpi=round(dpi), width=width, height=height)
+        width, height = _fit(*self._size, longest_edge)
+        return Dimensions(dpi=round(self._dpi), width=width, height=height)
 
 
 class ImageDocument:
     kind = "image"
 
-    def __init__(self, data: bytes):
+    def __init__(self, data: bytes, max_pixels: int | None = None):
         try:
-            img = Image.open(io.BytesIO(data))
-            img.load()
+            img = Image.open(io.BytesIO(data))  # header only, no pixel data yet
             # Only TIFF frames are pages; an animated GIF is one picture.
             frame_count = getattr(img, "n_frames", 1) if img.format == "TIFF" else 1
-            frames = []
+            dpi = img.info.get("dpi", (72, 72))[0]
+            sizes = []
             for i in range(frame_count):
                 img.seek(i)
-                frame = img.copy()
-                frame.info = dict(img.info)
-                frames.append(_flatten(frame))
+                width, height = img.size
+                if max_pixels is not None and width * height > max_pixels:
+                    raise TooLarge(f"image has {width * height} pixels, limit {max_pixels}")
+                sizes.append(_oriented_size(img))
+        except Image.DecompressionBombError as exc:
+            raise TooLarge("image exceeds the pixel limit") from exc
         except (UnidentifiedImageError, OSError, ValueError) as exc:
-            raise Unprocessable(f"cannot decode image: {exc}") from exc
-        self.pages = [ImagePage(frame, i) for i, frame in enumerate(frames)]
+            raise Unprocessable(f"cannot read image: {exc}") from exc
+        self.pages = [ImagePage(data, i, size, dpi, i) for i, size in enumerate(sizes)]
 
     def close(self) -> None:
         return None
@@ -208,7 +243,7 @@ Page = PdfPage | ImagePage
 Document = PdfDocument | ImageDocument
 
 
-def open_document(data: bytes, content_type: str) -> Document:
+def open_document(data: bytes, content_type: str, max_pixels: int | None = None) -> Document:
     if content_type == "application/pdf":
         return PdfDocument(data)
-    return ImageDocument(data)
+    return ImageDocument(data, max_pixels=max_pixels)

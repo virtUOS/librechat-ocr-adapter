@@ -24,6 +24,7 @@ def test_defaults(monkeypatch):
     assert s.min_visible_chars == 200
     assert s.image_coverage == 0.5
     assert s.longest_edge == 2048
+    assert s.max_image_pixels == 50_000_000
     assert s.log_level == "info"
 
 

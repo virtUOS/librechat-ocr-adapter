@@ -1,4 +1,6 @@
 import base64
+import tempfile
+from pathlib import Path
 
 import httpx
 
@@ -85,7 +87,7 @@ async def test_file_url_content_and_delete(client, settings):
     assert (await client.delete(f"/v1/files/{file_id}")).status_code == 404
     assert (await client.get(f"/v1/files/{file_id}/url")).status_code == 404
     assert (await client.get(f"/v1/files/{file_id}/content")).status_code == 404
-    assert list(settings.upload_dir.iterdir()) == []
+    assert [p for p in settings.upload_dir.rglob("*") if p.is_file()] == []
 
 
 async def test_ocr_mixed_pdf(client, fake, settings):
@@ -222,3 +224,22 @@ async def test_logs_never_contain_filenames(client, caplog):
     caplog.set_level("INFO")
     await uploaded_url(client, make_pdf(["text"]), "Geheimes Gutachten Müller.pdf")
     assert "Gutachten" not in caplog.text and "Müller" not in caplog.text
+
+
+async def test_large_upload_spools_only_inside_the_upload_dir(settings, vllm_http):
+    # Starlette spools multipart bodies over 1 MB to tempfile.gettempdir(); that
+    # must be inside the tmpfs, never the container's overlay filesystem.
+    app = create_app(settings.model_copy(update={"max_file_mb": 4}), http=vllm_http)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://adapter"
+    ) as client:
+        r = await upload(client, b"%PDF-1.7\n" + b"x" * 2_000_000)
+        assert r.status_code == 200
+    assert Path(tempfile.gettempdir()).is_relative_to(settings.upload_dir)
+    leftovers = [p for p in settings.upload_dir.rglob("*") if p.is_file()]
+    assert len(leftovers) == 1  # only the stored upload remains
+
+
+async def test_decompression_bomb_upload_is_413(client):
+    r = await upload(client, make_image("PNG", size=(15000, 15000), mode="1"), "bomb.png")
+    assert r.status_code == 413 and r.json()["type"] == "too_large"

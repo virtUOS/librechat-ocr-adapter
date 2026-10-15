@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     min_visible_chars: int = 200
     image_coverage: float = 0.5
     longest_edge: int = 2048
+    max_image_pixels: int = 50_000_000  # width * height of one image or frame
     log_level: str = "info"
 
     @field_validator("public_url", "vllm_url")

@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 import httpx
@@ -50,7 +51,8 @@ from ocr_adapter.app import create_app  # noqa: E402
 
 @pytest.fixture
 def app(settings, vllm_http):
-    return create_app(settings, http=vllm_http)
+    yield create_app(settings, http=vllm_http)
+    tempfile.tempdir = None  # create_app points the spool into the upload dir
 
 
 @pytest.fixture

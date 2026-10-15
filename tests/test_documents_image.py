@@ -1,10 +1,11 @@
 import io
+from unittest.mock import patch
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageFile
 
-from ocr_adapter.documents import ImageDocument, ImagePage, open_document
-from ocr_adapter.errors import Unprocessable
+from ocr_adapter.documents import ImageDocument, ImagePage, open_document, sniff_content_type
+from ocr_adapter.errors import TooLarge, Unprocessable
 
 from fixtures import make_image
 
@@ -73,10 +74,35 @@ def test_animated_gif_is_one_page():
     assert len(ImageDocument(buf.getvalue()).pages) == 1
 
 
-def test_truncated_image_is_unprocessable():
+def test_truncated_image_is_unprocessable_when_rendered():
     data = make_image("JPEG", size=(800, 600))[:200]
     with pytest.raises(Unprocessable):
+        ImageDocument(data).pages[0].render(2048)
+
+
+@pytest.mark.filterwarnings("ignore::PIL.Image.DecompressionBombWarning")
+def test_oversized_image_is_rejected_before_decoding():
+    data = make_image("PNG", size=(12000, 12000), mode="1")  # 144 MP in a few KB
+    assert len(data) < 200_000
+    with pytest.raises(TooLarge):
+        ImageDocument(data, max_pixels=50_000_000)
+
+
+def test_decompression_bomb_is_too_large():
+    data = make_image("PNG", size=(15000, 15000), mode="1")  # above Pillow's hard limit
+    with pytest.raises(TooLarge):
+        sniff_content_type(data)
+    with pytest.raises(TooLarge):
         ImageDocument(data)
+
+
+def test_frames_are_decoded_only_when_rendered():
+    data = make_image("TIFF", size=(300, 200), frames=3)
+    with patch.object(ImageFile.ImageFile, "load", autospec=True) as load:
+        doc = ImageDocument(data)
+        assert doc.pages[2].dimensions(2048).width == 300
+    assert load.call_count == 0
+    assert doc.pages[2].render(2048).size == (300, 200)
 
 
 def test_open_document_dispatches_image():

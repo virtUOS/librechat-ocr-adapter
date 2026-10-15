@@ -5,6 +5,7 @@ import asyncio
 import base64
 import binascii
 import logging
+import tempfile
 import time
 from contextlib import asynccontextmanager
 from typing import Literal
@@ -115,6 +116,11 @@ def create_app(
     )
     metrics = Metrics()
     store = FileStore(settings.upload_dir, settings.file_ttl_s, clock)
+    # Starlette spools multipart bodies over 1 MB to tempfile.gettempdir(). Point
+    # that into the upload tmpfs so request bodies never touch the host disk.
+    spool = settings.upload_dir / "spool"
+    spool.mkdir(parents=True, exist_ok=True)
+    tempfile.tempdir = str(spool)
     http = http or httpx.AsyncClient(base_url=settings.vllm_url)
     client = OcrClient(
         http,

@@ -4,7 +4,7 @@ import time
 import pytest
 
 from ocr_adapter.documents import PdfDocument
-from ocr_adapter.errors import DocumentTimeout, TooLarge, UpstreamError
+from ocr_adapter.errors import DocumentTimeout, TooLarge, Unprocessable, UpstreamError
 from ocr_adapter.ocr_client import OcrClient
 from ocr_adapter.pipeline import Pipeline
 
@@ -131,3 +131,16 @@ async def test_truncation_is_reported_and_counted(settings, fake, vllm_http):
     assert "ocr_truncated_pages_total 1.0" in text
     assert 'ocr_pages_total{source="ocr"} 1.0' in text
     assert 'ocr_documents_total{status="ok"} 1.0' in text
+
+
+async def test_pdfium_failure_during_processing_is_unprocessable(settings, vllm_http, monkeypatch):
+    import pypdfium2 as pdfium
+
+    from ocr_adapter.documents import PdfPage
+
+    def broken(self, *args):
+        raise pdfium.PdfiumError("Failed to load page.")
+
+    monkeypatch.setattr(PdfPage, "needs_ocr", broken)
+    with pytest.raises(Unprocessable):
+        await run(make_pipeline(settings, vllm_http), make_pdf(["text"]))
