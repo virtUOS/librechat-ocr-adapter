@@ -43,3 +43,19 @@ def settings(tmp_path):
         file_ttl_s=3600,
         longest_edge=512,
     )
+
+
+from ocr_adapter.app import create_app  # noqa: E402
+
+
+@pytest.fixture
+def app(settings, vllm_http):
+    return create_app(settings, http=vllm_http)
+
+
+@pytest.fixture
+async def client(app):
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://adapter"
+    ) as c:
+        yield c
