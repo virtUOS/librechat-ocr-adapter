@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 import pypdfium2 as pdfium
 import pypdfium2.raw as raw
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from ocr_adapter.errors import Unprocessable, UnsupportedMediaType
 
@@ -137,7 +137,78 @@ class PdfDocument:
         self._pdf.close()
 
 
-def open_document(data: bytes, content_type: str):
+def _flatten(img: Image.Image) -> Image.Image:
+    """Apply EXIF orientation, put transparency on white, return RGB."""
+    img = ImageOps.exif_transpose(img)
+    has_alpha = img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info)
+    if has_alpha:
+        rgba = img.convert("RGBA")
+        background = Image.new("RGB", rgba.size, (255, 255, 255))
+        background.paste(rgba, mask=rgba.getchannel("A"))
+        return background
+    return img.convert("RGB")
+
+
+class ImagePage:
+    def __init__(self, image: Image.Image, index: int):
+        self._image = image  # already RGB, oriented, flattened
+        self._rendered: dict[int, Image.Image] = {}
+        self.index = index
+
+    def visible_chars(self) -> int:
+        return 0
+
+    def image_coverage(self) -> float:
+        return 1.0
+
+    def needs_ocr(self, min_visible_chars: int, image_coverage: float) -> bool:
+        return True
+
+    def text(self) -> str:
+        return ""
+
+    def render(self, longest_edge: int) -> Image.Image:
+        if longest_edge not in self._rendered:
+            img = self._image.copy()
+            # thumbnail() keeps the aspect ratio and only ever shrinks.
+            img.thumbnail((longest_edge, longest_edge), Image.Resampling.LANCZOS)
+            self._rendered[longest_edge] = img
+        return self._rendered[longest_edge]
+
+    def dimensions(self, longest_edge: int) -> Dimensions:
+        width, height = self.render(longest_edge).size
+        dpi = self._image.info.get("dpi", (72, 72))[0]
+        return Dimensions(dpi=round(dpi), width=width, height=height)
+
+
+class ImageDocument:
+    kind = "image"
+
+    def __init__(self, data: bytes):
+        try:
+            img = Image.open(io.BytesIO(data))
+            img.load()
+            # Only TIFF frames are pages; an animated GIF is one picture.
+            frame_count = getattr(img, "n_frames", 1) if img.format == "TIFF" else 1
+            frames = []
+            for i in range(frame_count):
+                img.seek(i)
+                frame = img.copy()
+                frame.info = dict(img.info)
+                frames.append(_flatten(frame))
+        except (UnidentifiedImageError, OSError, ValueError) as exc:
+            raise Unprocessable(f"cannot decode image: {exc}") from exc
+        self.pages = [ImagePage(frame, i) for i, frame in enumerate(frames)]
+
+    def close(self) -> None:
+        return None
+
+
+Page = PdfPage | ImagePage
+Document = PdfDocument | ImageDocument
+
+
+def open_document(data: bytes, content_type: str) -> Document:
     if content_type == "application/pdf":
         return PdfDocument(data)
-    raise UnsupportedMediaType(f"cannot open {content_type}")  # replaced in Task 4
+    return ImageDocument(data)
