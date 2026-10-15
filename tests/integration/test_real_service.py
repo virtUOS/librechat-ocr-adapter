@@ -15,7 +15,8 @@ def test_born_digital_uses_text_layer_only(cli, fetch, service):
     data = cli.extract_pages(fetch("po"), list(range(0, 5)))
     result = cli.run_ocr(service, data, "po.pdf")
     assert [p["source"] for p in result["pages"]] == ["text"] * 5
-    assert "Prüfungsordnung" in result["pages"][0]["markdown"]
+    # The title page is set in capitals: "ALLGEMEINE PRÜFUNGSORDNUNG".
+    assert "prüfungsordnung" in result["pages"][0]["markdown"].lower()
 
 
 def test_mixed_document_pages_115_to_121(cli, fetch, service):
@@ -43,4 +44,4 @@ def test_image_upload(cli, fetch, service):
     image.save(buf, format="PNG")
     result = cli.run_ocr(service, buf.getvalue(), "page.png")
     assert len(result["pages"]) == 1 and result["pages"][0]["source"] == "ocr"
-    assert "Prüfungsordnung" in result["pages"][0]["markdown"]
+    assert "prüfungsordnung" in result["pages"][0]["markdown"].lower()
