@@ -13,6 +13,15 @@ uv run pytest
 uv run ruff check .
 ```
 
+## Dependencies in the image
+
+`requirements.txt` is exported from `uv.lock` and is what the Dockerfile installs, so the
+image is reproducible. After changing `pyproject.toml` or running `uv lock`, regenerate it:
+
+```
+uv export --frozen --no-dev --no-hashes --no-emit-project -o requirements.txt
+```
+
 ## Configuration
 
 All settings are environment variables with the prefix `OCR_`; see `src/ocr_adapter/config.py`.

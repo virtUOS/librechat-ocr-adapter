@@ -10,9 +10,13 @@ RUN useradd --create-home --uid 1000 app \
     && chown app:app /uploads
 
 WORKDIR /app
+# Dependencies are pinned from uv.lock (regenerate with `uv export --frozen --no-dev
+# --no-hashes --no-emit-project -o requirements.txt` after `uv lock` changes).
+COPY requirements.txt ./
+RUN pip install -r requirements.txt
 COPY pyproject.toml README.md ./
 COPY src ./src
-RUN pip install .
+RUN pip install --no-deps .
 
 USER app
 EXPOSE 8000
