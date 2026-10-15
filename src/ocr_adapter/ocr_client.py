@@ -47,16 +47,14 @@ class OcrClient:
         image.save(buf, format="PNG")
         return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
-    def payload(self, image: Image.Image) -> dict:
+    def payload(self, image_url: str) -> dict:
         # The image alone, with no text part: that is what LightOnOCR was trained on.
         return {
             "model": self._model,
             "messages": [
                 {
                     "role": "user",
-                    "content": [
-                        {"type": "image_url", "image_url": {"url": self.encode_png(image)}}
-                    ],
+                    "content": [{"type": "image_url", "image_url": {"url": image_url}}],
                 }
             ],
             "temperature": self._temperature,
@@ -64,8 +62,9 @@ class OcrClient:
             "max_tokens": self._max_tokens,
         }
 
-    async def transcribe(self, image: Image.Image) -> Transcription:
-        payload = self.payload(image)
+    async def transcribe(self, image_url: str) -> Transcription:
+        """image_url is a PNG data URL, encoded by the caller off the event loop."""
+        payload = self.payload(image_url)
         attempts = self._retries + 1
         error: UpstreamError | UpstreamUnavailable = UpstreamError("no attempt made")
         for attempt in range(1, attempts + 1):

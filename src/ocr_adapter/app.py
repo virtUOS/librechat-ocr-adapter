@@ -114,6 +114,8 @@ def create_app(
         level=settings.log_level.upper(),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    # httpx logs every request at INFO; the health probe to vLLM would flood the log.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     metrics = Metrics()
     store = FileStore(settings.upload_dir, settings.file_ttl_s, clock)
     # Starlette spools multipart bodies over 1 MB to tempfile.gettempdir(). Point
@@ -214,11 +216,13 @@ def create_app(
         return {"id": file_id, "object": "file", "deleted": True}
 
     @app.post("/v1/ocr")
-    async def ocr(request: OcrRequest):
-        data, content_type, source_id = _resolve(request.document.url, settings, store)
+    async def ocr(body: OcrRequest, request: Request):
+        data, content_type, source_id = _resolve(body.document.url, settings, store)
         document = await pipeline.open(data, content_type)
         try:
-            result = await pipeline.process(document)
+            # A client that hangs up (LibreChat's own timeout, a closed tab)
+            # must not keep vLLM busy on its pages.
+            result = await pipeline.process(document, disconnected=request.is_disconnected)
         finally:
             await pipeline.close(document)
         logger.info("ocr id=%s pages=%d seconds=%.1f", source_id, len(result.pages), result.seconds)

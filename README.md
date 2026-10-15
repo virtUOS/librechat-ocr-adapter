@@ -49,3 +49,22 @@ and logs carry ids, counts and timings only.
 | 20 scanned pages (Mitteilungsblatt 118–137), `OCR_CONCURRENCY=1` | 172.9 s |
 | Same, `OCR_CONCURRENCY=4` (default) | 60.3 s |
 | One dense table page (p. 120) alone, prompt / completion tokens | 2,894 / 1,193, about 16 s |
+
+## API
+
+| Route | Behaviour |
+|---|---|
+| `POST /v1/files` (multipart `purpose=ocr`, `file`) | stores the upload on the tmpfs; returns a Mistral file object with `id` |
+| `GET /v1/files/{id}/url` | `{"url": "<OCR_PUBLIC_URL>/v1/files/{id}/content"}`; `expiry` is ignored, the TTL governs |
+| `GET /v1/files/{id}/content` | the stored bytes |
+| `DELETE /v1/files/{id}` | removes the upload |
+| `POST /v1/ocr` | `{"model", "document": {"type": "document_url"\|"image_url", "<type>": url}}`; `url` is one of this service's file URLs or a base64 `data:` URL; other fields are ignored |
+| `GET /health` | `{"status": "ok", "vllm": "ok"\|"unreachable"}` |
+| `GET /metrics` | Prometheus text |
+
+The `/v1/ocr` response is Mistral-shaped: `model`, `pages[{index, markdown, images: [], dimensions{dpi, width, height}, source}]`,
+`usage_info{pages_processed, doc_size_bytes}`. `source` is an extension: `text` when the page's visible text layer was
+used, `ocr` when the page was rendered and transcribed by the model.
+
+Errors are JSON `{"message", "type"}`: 400 `invalid_request`, 404 `not_found`, 413 `too_large`, 415 `unsupported_media_type`,
+422 `unprocessable`, 499 `client_disconnected`, 502 `upstream_error`, 503 `upstream_unavailable` / `storage_full`, 504 `timeout`.

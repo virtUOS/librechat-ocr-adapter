@@ -12,17 +12,16 @@ the vLLM call, so at most `concurrency` rendered pages exist at once."""
 import asyncio
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
 
 import pypdfium2 as pdfium
-from PIL import Image
 
 from ocr_adapter.config import Settings
 from ocr_adapter.documents import Dimensions, Document, Page, open_document
-from ocr_adapter.errors import AdapterError, DocumentTimeout, Unprocessable
+from ocr_adapter.errors import AdapterError, ClientDisconnected, DocumentTimeout, Unprocessable
 from ocr_adapter.metrics import Metrics
 from ocr_adapter.ocr_client import OcrClient
 
@@ -80,18 +79,34 @@ class Pipeline:
         """Queued behind any pdfium work still running for this document."""
         await self._in_pdfium(document.close)
 
-    async def process(self, document: Document) -> OcrResult:
+    async def process(
+        self,
+        document: Document,
+        disconnected: Callable[[], Awaitable[bool]] | None = None,
+    ) -> OcrResult:
+        """`disconnected` is polled while pages are in flight; once it reports the
+        client gone, every page task is cancelled and ClientDisconnected is raised."""
         started = time.monotonic()
         results: dict[int, PageResult] = {}
 
         async def run(page: Page) -> None:
             results[page.index] = await self._page(page)
 
+        async def watch() -> None:
+            # Raising here makes the TaskGroup cancel every page task.
+            while True:
+                await asyncio.sleep(0.5)
+                if await disconnected():
+                    raise ClientDisconnected("client went away")
+
         try:
             async with asyncio.timeout(self._s.document_timeout_s):
                 async with asyncio.TaskGroup() as group:
-                    for page in document.pages:
-                        group.create_task(run(page))
+                    pages = [group.create_task(run(page)) for page in document.pages]
+                    if disconnected is not None:
+                        watcher = group.create_task(watch())
+                        await asyncio.gather(*pages)
+                        watcher.cancel()
         except TimeoutError:
             self.metrics.documents.labels(status="timeout").inc()
             raise DocumentTimeout(
@@ -127,8 +142,10 @@ class Pipeline:
             return True, "", dimensions
         return False, page.text(), dimensions
 
-    def _render(self, page: Page) -> tuple[Image.Image, Dimensions]:
-        return page.render(self._s.longest_edge), page.dimensions(self._s.longest_edge)
+    def _render(self, page: Page) -> tuple[str, Dimensions]:
+        # PNG encoding is CPU work too; it runs here, on the executor thread.
+        image = page.render(self._s.longest_edge)
+        return OcrClient.encode_png(image), page.dimensions(self._s.longest_edge)
 
     async def _page(self, page: Page) -> PageResult:
         started = time.monotonic()
@@ -138,8 +155,8 @@ class Pipeline:
             self._observe(result, started)
             return result
         async with self._slots:
-            image, dimensions = await self._in_pdfium(self._render, page)
-            transcription = await self._client.transcribe(image)
+            image_url, dimensions = await self._in_pdfium(self._render, page)
+            transcription = await self._client.transcribe(image_url)
         result = PageResult(
             page.index, transcription.text, "ocr", dimensions, transcription.truncated
         )

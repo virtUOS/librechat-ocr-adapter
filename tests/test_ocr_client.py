@@ -24,7 +24,7 @@ def make_client(http, **overrides):
 
 
 async def test_request_shape(fake, vllm_http):
-    result = await make_client(vllm_http).transcribe(IMAGE)
+    result = await make_client(vllm_http).transcribe(OcrClient.encode_png(IMAGE))
     body = fake.requests[-1]
     assert body["model"] == "lightonai/LightOnOCR-3-4B"
     assert body["temperature"] == 0.2
@@ -47,21 +47,21 @@ def test_encode_png_round_trips():
 
 async def test_retries_once_then_succeeds(fake, vllm_http):
     fake.fail_times = 1
-    await make_client(vllm_http).transcribe(IMAGE)
+    await make_client(vllm_http).transcribe(OcrClient.encode_png(IMAGE))
     assert len(fake.requests) == 2
 
 
 async def test_fails_after_one_retry(fake, vllm_http):
     fake.fail_times = 2
     with pytest.raises(UpstreamError):
-        await make_client(vllm_http).transcribe(IMAGE)
+        await make_client(vllm_http).transcribe(OcrClient.encode_png(IMAGE))
     assert len(fake.requests) == 2
 
 
 async def test_timeout_is_upstream_error(fake, vllm_http):
     fake.delay = 0.5
     with pytest.raises(UpstreamError):
-        await make_client(vllm_http, page_timeout_s=0.1).transcribe(IMAGE)
+        await make_client(vllm_http, page_timeout_s=0.1).transcribe(OcrClient.encode_png(IMAGE))
     assert len(fake.requests) == 2
 
 
@@ -75,19 +75,19 @@ async def test_connection_failure_is_unavailable():
 
     http = httpx.AsyncClient(transport=httpx.MockTransport(refuse), base_url="http://vllm")
     with pytest.raises(UpstreamUnavailable):
-        await make_client(http).transcribe(IMAGE)
+        await make_client(http).transcribe(OcrClient.encode_png(IMAGE))
     assert calls == 2
     assert await make_client(http).healthy() is False
 
 
 async def test_truncation_is_flagged(fake, vllm_http):
     fake.truncate = True
-    assert (await make_client(vllm_http).transcribe(IMAGE)).truncated is True
+    assert (await make_client(vllm_http).transcribe(OcrClient.encode_png(IMAGE))).truncated is True
 
 
 async def test_list_content_is_joined(fake, vllm_http):
     fake.content_as_list = True
-    result = await make_client(vllm_http).transcribe(IMAGE)
+    result = await make_client(vllm_http).transcribe(OcrClient.encode_png(IMAGE))
     assert result.text.startswith("ocr:")
 
 
@@ -97,8 +97,15 @@ async def test_malformed_response_is_upstream_error():
 
     http = httpx.AsyncClient(transport=httpx.MockTransport(weird), base_url="http://vllm")
     with pytest.raises(UpstreamError):
-        await make_client(http).transcribe(IMAGE)
+        await make_client(http).transcribe(OcrClient.encode_png(IMAGE))
 
 
 async def test_healthy(fake, vllm_http):
     assert await make_client(vllm_http).healthy() is True
+
+
+async def test_transcribe_takes_a_data_url(fake, vllm_http):
+    url = OcrClient.encode_png(IMAGE)
+    result = await make_client(vllm_http).transcribe(url)
+    assert fake.requests[-1]["messages"][0]["content"][0]["image_url"]["url"] == url
+    assert result.text == fake.text_for(url)

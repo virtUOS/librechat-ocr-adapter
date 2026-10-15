@@ -159,3 +159,24 @@ async def test_open_rejects_too_many_pages_before_loading_them(settings, vllm_ht
             make_pdf(["text"] * 3), "application/pdf"
         )
     assert loaded == []
+
+
+async def test_client_disconnect_cancels_the_document(settings, fake, vllm_http):
+    from ocr_adapter.errors import ClientDisconnected
+
+    fake.delay = 2.0
+    started = time.monotonic()
+    pipeline = make_pipeline(settings, vllm_http)
+    document = await pipeline.open(make_pdf(["scan", "scan"]), "application/pdf")
+
+    async def gone_after_a_moment():
+        return time.monotonic() - started > 0.3
+
+    try:
+        with pytest.raises(ClientDisconnected):
+            await pipeline.process(document, disconnected=gone_after_a_moment)
+    finally:
+        await pipeline.close(document)
+    assert time.monotonic() - started < 1.5
+    await asyncio.sleep(0.05)
+    assert fake.in_flight == 0

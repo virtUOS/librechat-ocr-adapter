@@ -243,3 +243,9 @@ async def test_large_upload_spools_only_inside_the_upload_dir(settings, vllm_htt
 async def test_decompression_bomb_upload_is_413(client):
     r = await upload(client, make_image("PNG", size=(15000, 15000), mode="1"), "bomb.png")
     assert r.status_code == 413 and r.json()["type"] == "too_large"
+
+
+async def test_httpx_health_probes_are_not_logged_at_info(client, caplog):
+    caplog.set_level("INFO")
+    await client.get("/health")
+    assert "HTTP Request: GET" not in caplog.text

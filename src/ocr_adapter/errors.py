@@ -36,6 +36,11 @@ class Unprocessable(AdapterError):
     type = "unprocessable"
 
 
+class ClientDisconnected(AdapterError):
+    status = 499
+    type = "client_disconnected"
+
+
 class UpstreamError(AdapterError):
     status = 502
     type = "upstream_error"
