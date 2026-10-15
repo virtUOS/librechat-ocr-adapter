@@ -31,3 +31,12 @@ docker run -d --name ocr-adapter --network <network with vllm> \
 Uploads live only on the tmpfs and are removed by `DELETE`, by the TTL sweep
 (`OCR_FILE_TTL_S`, default one hour) and by any restart. OCR results are never stored,
 and logs carry ids, counts and timings only.
+
+## Measurements (ocr-test, RTX 3090, vLLM v0.22.0, 2026-10-15)
+
+| Check | Result |
+|---|---|
+| Direct 2048 px render vs 400 DPI then LANCZOS downscale, Mitteilungsblatt 01/2025 p. 120 | word-level similarity 0.994; the only difference was a caption rendered in italics with a rule vs plain; direct render kept |
+| 20 scanned pages (Mitteilungsblatt 118–137), `OCR_CONCURRENCY=1` | 172.9 s |
+| Same, `OCR_CONCURRENCY=4` (default) | 60.3 s |
+| One dense table page (p. 120) alone, prompt / completion tokens | 2,894 / 1,193, about 16 s |
