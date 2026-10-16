@@ -1,0 +1,54 @@
+# LightOnOCR-3-4B on vLLM plus the adapter, for one GPU host. Nothing here
+# authenticates: put a reverse proxy that checks a bearer key in front of the
+# adapter before exposing it (README, "Security"), and set OCR_PUBLIC_URL to
+# the URL LibreChat will reach it under.
+services:
+  vllm:
+    image: vllm/vllm-openai:v0.30.0
+    ipc: host
+    command: [
+      "--host", "0.0.0.0", "--port", "8000",
+      "--model", "lightonai/LightOnOCR-3-4B",
+      "--trust-remote-code",
+      "--max-model-len", "8192",
+      "--gpu-memory-utilization", "0.9",
+      "--default-chat-template-kwargs", "{\"enable_thinking\": false}",
+      "--limit-mm-per-prompt", "{\"image\": 1}"
+    ]
+    environment:
+      HF_HUB_DISABLE_XET: "1"
+    volumes:
+      - hf-cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 600s
+      retries: 3
+
+  ocr-adapter:
+    image: ghcr.io/virtuos/librechat-ocr-adapter:0.1.0
+    environment:
+      OCR_VLLM_URL: http://vllm:8000
+      OCR_PUBLIC_URL: https://ocr.example.org
+    volumes:
+      - type: tmpfs
+        target: /uploads
+        tmpfs:
+          size: 2147483648
+          mode: 01777
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      vllm:
+        condition: service_healthy
+
+volumes:
+  hf-cache:
