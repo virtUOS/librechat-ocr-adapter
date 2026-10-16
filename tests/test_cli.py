@@ -1,20 +1,14 @@
-import importlib.util
-from pathlib import Path
-
 import pypdfium2 as pdfium
 import pytest
 
-from fixtures import make_pdf
+from ocr_adapter import cli as ocr_cli
 
-SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "ocr.py"
+from fixtures import make_pdf
 
 
 @pytest.fixture(scope="module")
 def cli():
-    spec = importlib.util.spec_from_file_location("ocr_cli", SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return ocr_cli
 
 
 def test_parse_pages(cli):
@@ -44,3 +38,13 @@ def test_join_pages_matches_librechat(cli):
     two = {"pages": [{"markdown": "a"}, {"markdown": "b"}]}
     assert cli.join_pages(one) == "hello\n\n"
     assert cli.join_pages(two) == "# PAGE 1\na\n\n# PAGE 2\nb\n\n"
+
+
+def test_main_requires_base_url_and_key(cli, monkeypatch, tmp_path):
+    monkeypatch.delenv("OCR_BASE_URL", raising=False)
+    monkeypatch.delenv("OCR_API_KEY", raising=False)
+    pdf = tmp_path / "x.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+    with pytest.raises(SystemExit) as exc:
+        cli.main([str(pdf)])
+    assert exc.value.code == 2

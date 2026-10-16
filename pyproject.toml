@@ -1,8 +1,10 @@
 [project]
-name = "ocr-adapter"
+name = "librechat-ocr-adapter"
 version = "0.1.0"
-description = "Mistral-OCR-compatible document OCR on top of vLLM and LightOnOCR"
+description = "Mistral-OCR-compatible document OCR service for LibreChat on top of vLLM and LightOnOCR"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115",
@@ -14,6 +16,13 @@ dependencies = [
     "pydantic-settings>=2.4",
     "prometheus-client>=0.20",
 ]
+
+[project.urls]
+Repository = "https://github.com/virtUOS/librechat-ocr-adapter"
+Changelog = "https://github.com/virtUOS/librechat-ocr-adapter/blob/main/CHANGELOG.md"
+
+[project.scripts]
+librechat-ocr = "ocr_adapter.cli:main"
 
 [dependency-groups]
 dev = [

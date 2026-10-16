@@ -1,11 +1,11 @@
-import importlib.util
 import os
 from pathlib import Path
 
 import httpx
 import pytest
 
-SCRIPT = Path(__file__).resolve().parents[4] / "scripts" / "ocr.py"
+from ocr_adapter import cli as ocr_cli
+
 CACHE = Path(__file__).parent / ".cache"
 DOCUMENTS = {
     "po": "https://www.uni-osnabrueck.de/fileadmin/uos/10_studieren/20_unser_studienangebot/20_abschluesse/70_ordnungen_studium/Allgemeine-PO-Bachelor-Master_2025-03.pdf",
@@ -25,10 +25,7 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture(scope="session")
 def cli():
-    spec = importlib.util.spec_from_file_location("ocr_cli", SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return ocr_cli
 
 
 @pytest.fixture(scope="session")
