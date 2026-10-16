@@ -1,6 +1,6 @@
-"""Against a real adapter + vLLM. Run from the Mac:
+"""Against a real adapter + vLLM:
 
-    OCR_TEST_BASE_URL=https://ocr-test.virtuos.uni-osnabrueck.de OCR_TEST_API_KEY=... \
+    OCR_TEST_BASE_URL=https://ocr.example.org OCR_TEST_API_KEY=... \
         uv run pytest tests/integration -v
 """
 

@@ -321,7 +321,7 @@ wheels = [
 ]
 
 [[package]]
-name = "ocr-adapter"
+name = "librechat-ocr-adapter"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
