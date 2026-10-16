@@ -35,7 +35,13 @@ def fetch():
     def _fetch(name: str) -> bytes:
         path = CACHE / f"{name}.pdf"
         if not path.exists():
-            response = httpx.get(DOCUMENTS[name], follow_redirects=True, timeout=120)
+            # The university's server answers 404 to httpx's default User-Agent.
+            response = httpx.get(
+                DOCUMENTS[name],
+                follow_redirects=True,
+                timeout=120,
+                headers={"User-Agent": "librechat-ocr-adapter-tests (httpx)"},
+            )
             response.raise_for_status()
             path.write_bytes(response.content)
         return path.read_bytes()
