@@ -1,22 +1,28 @@
+# uv comes from its own image; a FROM line so Dependabot's docker ecosystem bumps it.
+FROM ghcr.io/astral-sh/uv:0.13.1 AS uv
+
 FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT=/app/.venv \
+    PATH="/app/.venv/bin:$PATH"
 
 RUN useradd --create-home --uid 1000 app \
     && mkdir -p /uploads \
     && chown app:app /uploads
 
 WORKDIR /app
-# Dependencies are pinned from uv.lock (regenerate with `uv export --frozen --no-dev
-# --no-hashes --no-emit-project -o requirements.txt` after `uv lock` changes).
-COPY requirements.txt ./
-RUN pip install -r requirements.txt
-COPY pyproject.toml README.md ./
+COPY --from=uv /uv /bin/uv
+# Dependencies first (this layer is cached while uv.lock is unchanged), the
+# project after its source. Versions are exactly those in uv.lock.
+COPY pyproject.toml uv.lock README.md ./
+RUN uv sync --frozen --no-dev --no-editable --no-install-project
 COPY src ./src
-RUN pip install --no-deps .
+RUN uv sync --frozen --no-dev --no-editable \
+    && rm /bin/uv
 
 USER app
 EXPOSE 8000
