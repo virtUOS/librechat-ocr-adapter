@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- The image carries the `LICENSE` file in the package metadata.
+- `examples/docker-compose.yml` no longer waits for vLLM's healthcheck before starting the
+  adapter: `/health` reports `"vllm":"unreachable"` while the model loads, as the quick start says.
+- Releasing also bumps the version pinned in the README and in the example compose file;
+  Dependabot watches `examples/` too.
+
 ## [0.1.0] - 2026-10-16
 
 First public release: the service as it has run in production for the LibreChat instances of
@@ -24,4 +34,5 @@ Osnabrück University since 2026-10-16.
 - Container image `ghcr.io/virtuos/librechat-ocr-adapter` for `linux/amd64` and `linux/arm64`,
   installed from `uv.lock`.
 
+[Unreleased]: https://github.com/virtUOS/librechat-ocr-adapter/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/virtUOS/librechat-ocr-adapter/releases/tag/v0.1.0

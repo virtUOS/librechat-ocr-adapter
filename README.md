@@ -179,9 +179,11 @@ the Bundestag) into `tests/integration/.cache/` on first run:
 OCR_TEST_BASE_URL=https://ocr.example.org OCR_TEST_API_KEY=... uv run pytest tests/integration -v
 ```
 
-Releasing: bump `version` in `pyproject.toml`, add the section to `CHANGELOG.md`, tag `vX.Y.Z`
-and push the tag. The release workflow refuses a tag that does not match the packaged version,
-then builds the image for both platforms and pushes it to GHCR.
+Releasing: bump `version` in `pyproject.toml`, move the `Unreleased` entries in `CHANGELOG.md`
+into the new version's section, bump the version pinned in this README (the CLI section) and in
+`examples/docker-compose.yml`, then tag `vX.Y.Z` and push the tag. The release workflow refuses
+a tag that does not match the packaged version, then builds the image for both platforms and
+pushes it to GHCR.
 
 ## Measurements (RTX 3090, vLLM v0.22.0, 2026-10-15)
 

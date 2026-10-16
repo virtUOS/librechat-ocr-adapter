@@ -18,7 +18,7 @@ WORKDIR /app
 COPY --from=uv /uv /bin/uv
 # Dependencies first (this layer is cached while uv.lock is unchanged), the
 # project after its source. Versions are exactly those in uv.lock.
-COPY pyproject.toml uv.lock README.md ./
+COPY pyproject.toml uv.lock README.md LICENSE ./
 RUN uv sync --frozen --no-dev --no-editable --no-install-project
 COPY src ./src
 RUN uv sync --frozen --no-dev --no-editable \
