@@ -4,7 +4,7 @@
 # the URL LibreChat will reach it under.
 services:
   vllm:
-    image: vllm/vllm-openai:v0.30.0
+    image: vllm/vllm-openai:v0.31.0
     ipc: host
     command: [
       "--host", "0.0.0.0", "--port", "8000",
