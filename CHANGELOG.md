@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Every labelled series (`ocr_documents_total{status}`, `ocr_pages_total{source}`,
+  `ocr_errors_total{type}`, `ocr_page_seconds{source}`) is exported from startup, at zero. Before,
+  a series appeared only after its first observation, so a freshly (re)started adapter exported
+  none of them and a Grafana panel showed "No data" instead of zero until the next document.
+
 ### Changed
 
 - The image carries the `LICENSE` file in the package metadata.

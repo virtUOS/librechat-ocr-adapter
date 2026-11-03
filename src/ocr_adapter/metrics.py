@@ -6,6 +6,27 @@ from prometheus_client import (
     generate_latest,
 )
 
+from ocr_adapter.errors import AdapterError
+
+# Every labelled series is created at startup, at zero. prometheus_client emits
+# a labelled series only after its first observation, so a freshly started
+# adapter would otherwise export no ocr_documents_total, ocr_pages_total,
+# ocr_errors_total or ocr_page_seconds at all, and a dashboard would show
+# "No data" instead of zero until the first document arrives.
+PAGE_SOURCES = ("text", "ocr")
+# "ok", the document deadline, and the errors a page task can raise
+# (Pipeline.process reports the first of them as the document's status).
+DOCUMENT_STATUSES = (
+    "ok",
+    "timeout",
+    "client_disconnected",
+    "too_large",
+    "unprocessable",
+    "upstream_error",
+    "upstream_unavailable",
+)
+ERROR_TYPES = tuple(cls.type for cls in (AdapterError, *AdapterError.__subclasses__()))
+
 
 class Metrics:
     """One registry per instance so tests never collide on metric names."""
@@ -40,6 +61,13 @@ class Metrics:
             buckets=(0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600, 1200),
             registry=r,
         )
+        for status in DOCUMENT_STATUSES:
+            self.documents.labels(status=status)
+        for source in PAGE_SOURCES:
+            self.pages.labels(source=source)
+            self.page_seconds.labels(source=source)
+        for type_ in ERROR_TYPES:
+            self.errors.labels(type=type_)
 
     def render(self) -> bytes:
         return generate_latest(self.registry)
