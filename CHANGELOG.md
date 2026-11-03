@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-03
+
 ### Fixed
 
 - Every labelled series (`ocr_documents_total{status}`, `ocr_pages_total{source}`,
@@ -41,5 +43,6 @@ Osnabrück University since 2026-10-16.
 - Container image `ghcr.io/virtuos/librechat-ocr-adapter` for `linux/amd64` and `linux/arm64`,
   installed from `uv.lock`.
 
-[Unreleased]: https://github.com/virtUOS/librechat-ocr-adapter/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/virtUOS/librechat-ocr-adapter/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/virtUOS/librechat-ocr-adapter/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/virtUOS/librechat-ocr-adapter/releases/tag/v0.1.0

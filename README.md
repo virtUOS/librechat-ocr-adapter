@@ -113,14 +113,14 @@ URL, `/ocr`, delete) and prints the Markdown joined like LibreChat (`# PAGE n` h
 raw JSON with `--json`. Page count, time and per-page sources go to stderr.
 
 ```
-uvx --from git+https://github.com/virtUOS/librechat-ocr-adapter@v0.1.0 librechat-ocr \
+uvx --from git+https://github.com/virtUOS/librechat-ocr-adapter@v0.1.1 librechat-ocr \
     document.pdf --base-url https://ocr.example.org --key "$OCR_API_KEY" [--pages 115-121] [--json]
 ```
 
 The same from the image:
 
 ```
-docker run --rm -v "$PWD:/data" ghcr.io/virtuos/librechat-ocr-adapter:0.1.0 \
+docker run --rm -v "$PWD:/data" ghcr.io/virtuos/librechat-ocr-adapter:0.1.1 \
     librechat-ocr /data/document.pdf --base-url https://ocr.example.org --key "$OCR_API_KEY"
 ```
 
