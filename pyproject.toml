@@ -1,6 +1,6 @@
 [project]
 name = "librechat-ocr-adapter"
-version = "0.1.0"
+version = "0.1.1"
 description = "Mistral-OCR-compatible document OCR service for LibreChat on top of vLLM and LightOnOCR"
 readme = "README.md"
 license = "MIT"

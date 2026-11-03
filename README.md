@@ -113,14 +113,14 @@ URL, `/ocr`, delete) and prints the Markdown joined like LibreChat (`# PAGE n` h
 raw JSON with `--json`. Page count, time and per-page sources go to stderr.
 
 ```
-uvx --from git+https://github.com/virtUOS/librechat-ocr-adapter@v0.1.0 librechat-ocr \
+uvx --from git+https://github.com/virtUOS/librechat-ocr-adapter@v0.1.1 librechat-ocr \
     document.pdf --base-url https://ocr.example.org --key "$OCR_API_KEY" [--pages 115-121] [--json]
 ```
 
 The same from the image:
 
 ```
-docker run --rm -v "$PWD:/data" ghcr.io/virtuos/librechat-ocr-adapter:0.1.0 \
+docker run --rm -v "$PWD:/data" ghcr.io/virtuos/librechat-ocr-adapter:0.1.1 \
     librechat-ocr /data/document.pdf --base-url https://ocr.example.org --key "$OCR_API_KEY"
 ```
 
@@ -155,6 +155,9 @@ Errors are JSON `{"message", "type"}`: 400 `invalid_request`, 404 `not_found`, 4
 | `ocr_errors_total{type}` | failed requests, by error type (the `type` of the error JSON) |
 | `ocr_page_seconds{source}` | histogram of per-page processing time |
 | `ocr_document_seconds` | histogram of per-document processing time |
+
+Every labelled series exists from startup, at zero, so a restart shows as a counter reset rather
+than as a gap.
 
 Put the route behind authentication too (basic auth on the proxy, as in the Caddy example's
 style) before pointing a Prometheus at it.

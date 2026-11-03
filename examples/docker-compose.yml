@@ -34,7 +34,7 @@ services:
       retries: 3
 
   ocr-adapter:
-    image: ghcr.io/virtuos/librechat-ocr-adapter:0.1.0
+    image: ghcr.io/virtuos/librechat-ocr-adapter:0.1.1
     environment:
       OCR_VLLM_URL: http://vllm:8000
       OCR_PUBLIC_URL: https://ocr.example.org

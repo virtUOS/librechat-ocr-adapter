@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-03
+
+### Fixed
+
+- Every labelled series (`ocr_documents_total{status}`, `ocr_pages_total{source}`,
+  `ocr_errors_total{type}`, `ocr_page_seconds{source}`) is exported from startup, at zero. Before,
+  a series appeared only after its first observation, so a freshly (re)started adapter exported
+  none of them and a Grafana panel showed "No data" instead of zero until the next document.
+
 ### Changed
 
 - The image carries the `LICENSE` file in the package metadata.
@@ -34,5 +43,6 @@ Osnabrück University since 2026-10-16.
 - Container image `ghcr.io/virtuos/librechat-ocr-adapter` for `linux/amd64` and `linux/arm64`,
   installed from `uv.lock`.
 
-[Unreleased]: https://github.com/virtUOS/librechat-ocr-adapter/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/virtUOS/librechat-ocr-adapter/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/virtUOS/librechat-ocr-adapter/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/virtUOS/librechat-ocr-adapter/releases/tag/v0.1.0
