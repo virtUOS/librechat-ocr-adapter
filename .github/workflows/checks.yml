@@ -21,5 +21,11 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest -q
+      # .python-version pins the oldest supported Python; the image runs the newest.
+      - name: The tests must pass on the image's Python too
+        run: |
+          version="$(sed -nE 's/^FROM python:([0-9]+\.[0-9]+)-.*/\1/p' Dockerfile)"
+          test -n "$version"
+          uv run --frozen --python "$version" pytest -q
       - name: The image must build
         run: docker build .
