@@ -1,7 +1,7 @@
 # uv comes from its own image; a FROM line so Dependabot's docker ecosystem bumps it.
 FROM ghcr.io/astral-sh/uv:0.13.6 AS uv
 
-FROM python:3.14-slim
+FROM python:3.15-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
