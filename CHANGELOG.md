@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- CI also runs the test suite on the Python version the image is built from (read from the
+  `FROM python:` line of the Dockerfile), so a base-image bump is tested, not only built.
+
 ## [0.1.1] - 2026-11-03
 
 ### Fixed
